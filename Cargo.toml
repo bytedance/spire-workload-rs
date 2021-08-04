@@ -1,0 +1,43 @@
+[package]
+name = "spire-workload"
+version = "1.1.1"
+authors = ["Maxwell Bruce", "Yu Ding"]
+edition = "2018"
+build = "build.rs"
+description = "spire workload api for rust"
+license = "Apache-2.0"
+homepage = "https://github.com/bytedance/spire-workload-rs"
+
+[lib]
+name = "spire_workload"
+path = "src/lib.rs"
+
+[dependencies]
+tonic = { version = "0.5", features = ["tls"] }
+tokio = { version = "1.1", features = ["full"] }
+tokio-rustls = { version = "0.22" }
+log = "0.4"
+env_logger = "0.8"
+rustls = { version = "0.19", features = ["dangerous_configuration"] }
+webpki = "0.21"
+lazy_static = "1.4"
+arc-swap = "1.2"
+futures = "0.3"
+prost = "0.8"
+base64 = "0.13"
+tower = "0.4"
+url = { version = "2.1", features = ["serde"] }
+serde = "1.0"
+anyhow = "1.0"
+x509-parser = "0.9"
+oid-registry = "0.1"
+openssl = { version = "0.10", features = ["vendored"] }
+serde_json = "1.0"
+jsonwebtoken = "7.2.0"
+
+[build-dependencies]
+tonic-build = { version = "0.5" }
+
+[dev-dependencies]
+rcgen = "0.8"
+serde_test = "1.0"
