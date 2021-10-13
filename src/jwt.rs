@@ -21,7 +21,7 @@ use crate::SpiffeID;
 const SEGMENTS_COUNT: usize = 3;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-struct JwtKey {
+pub struct JwtKey {
     #[serde(rename = "kty")]
     pub key_type: String,
     #[serde(rename = "kid")]
@@ -34,7 +34,7 @@ struct JwtKey {
 
 #[derive(PartialEq, Debug)]
 pub struct JwtBundle {
-    inner: BTreeMap<String, JwtKey>,
+    pub inner: BTreeMap<String, JwtKey>,
 }
 
 impl fmt::Display for JwtBundle {

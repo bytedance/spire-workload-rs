@@ -15,7 +15,7 @@ mod verifier;
 mod workload;
 
 pub use authenticator::SpiffeIdAuthorizer;
-pub use jwt::JwtBundle;
+pub use jwt::{JwtBundle, JwtKey};
 pub use spiffe::{SpiffeID, SpiffeIDMatcher};
 
 use crate::der::parse_der_cert_chain;

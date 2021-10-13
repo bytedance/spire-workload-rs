@@ -1,6 +1,6 @@
 [package]
 name = "spire-workload"
-version = "1.1.1"
+version = "1.1.2"
 authors = ["Maxwell Bruce", "Yu Ding"]
 edition = "2018"
 build = "build.rs"
