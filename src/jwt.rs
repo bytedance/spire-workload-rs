@@ -13,7 +13,7 @@ use openssl::{
 
 use base64::decode_config as b64_dec;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 use serde_json::Value as JsonValue;
 
 use crate::SpiffeID;
@@ -99,12 +99,37 @@ struct JwtPayload {
     sub: SpiffeID,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+// ref: https://stackoverflow.com/questions/44331037/how-can-i-distinguish-between-a-deserialized-field-that-is-missing-and-one-that
+// && https://play.integer32.com/?gist=62d611b5544077a2471ed6ad68b5ed67&version=stable
+fn deserialize_optional_field<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Some(Option::deserialize(deserializer)?))
+}
+
+impl Default for Claims {
+    fn default() -> Self {
+        Claims {
+            aud: vec![String::from("dummy_audience")],
+            exp: 1753717118, // Mon Jul 28 2025 15:38:38 GMT+0000
+            iat: 1627015222, // Fri Jul 23 2021 04:40:22 GMT+0000
+            iss: None,
+            sub: String::from("spiffe://dummy.org/ns:dummy/id:dummy"),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(default)]
 struct Claims {
     aud: Vec<String>,
     exp: usize,
     iat: usize,
-    iss: String,
+    #[serde(deserialize_with = "deserialize_optional_field")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    iss: Option<Option<String>>,
     sub: String,
 }
 
@@ -186,18 +211,6 @@ mod tests {
     use jsonwebtoken::{encode, EncodingKey, Header};
     use serde_test::{assert_tokens, Token};
 
-    impl Default for Claims {
-        fn default() -> Self {
-            Claims {
-                aud: vec![String::from("dummy_audience")],
-                exp: 1753717118, // Mon Jul 28 2025 15:38:38 GMT+0000
-                iat: 1627015222, // Fri Jul 23 2021 04:40:22 GMT+0000
-                iss: String::from("user"),
-                sub: String::from("spiffe://dummy.org/ns:dummy/id:dummy"),
-            }
-        }
-    }
-
     impl Default for JwtKey {
         fn default() -> Self {
             JwtKey {
@@ -236,6 +249,7 @@ mod tests {
         token_invalid_key_id: String,
         token_expired: String,
         token_about_to_expire: String,
+        token_with_issuer: String,
     }
 
     impl Setup {
@@ -295,6 +309,9 @@ mod tests {
                     let now = start.duration_since(UNIX_EPOCH).unwrap();
                     let expired_time = now.as_secs() as usize - 46460;
                     generate_token_on_expire(expired_time)
+                },
+                token_with_issuer: {
+                    generate_token_with_issuer()
                 },
             }
         }
@@ -376,6 +393,29 @@ mod tests {
 
         let my_claims = Claims {
             exp: expire_time,
+            ..Claims::default()
+        };
+        let header = Header {
+            alg: Algorithm::ES256,
+            kid: Some("dummy_keyid".to_owned()),
+            ..Header::default()
+        };
+
+        let key = openssl::pkey::PKey::private_key_from_pem(priv_key_pem).unwrap();
+        let pem = key.private_key_to_pem_pkcs8().unwrap();
+        encode(
+            &header,
+            &my_claims,
+            &EncodingKey::from_ec_pem(pem.as_slice()).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn generate_token_with_issuer() -> String {
+        let priv_key_pem = include_bytes!("../tests/data/priv_key_256v1.pem");
+
+        let my_claims = Claims {
+            iss: Some(Some(String::from("user"))),
             ..Claims::default()
         };
         let header = Header {
@@ -517,6 +557,18 @@ mod tests {
                 .verify_token::<JwtPayload>(&setup.token_about_to_expire)
                 .is_ok(),
             "Token about to expire verification failed"
+        );
+    }
+
+    #[test]
+    fn test_verify_token_with_issuer() {
+        let setup = Setup::new();
+        assert!(
+            setup
+                .bundle_p256
+                .verify_token::<JwtPayload>(&setup.token_with_issuer)
+                .is_ok(),
+            "Token with issuer verification failed"
         );
     }
 
