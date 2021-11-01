@@ -13,7 +13,7 @@ use openssl::{
 
 use base64::decode_config as b64_dec;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
 use crate::SpiffeID;
@@ -99,37 +99,14 @@ struct JwtPayload {
     sub: SpiffeID,
 }
 
-// ref: https://stackoverflow.com/questions/44331037/how-can-i-distinguish-between-a-deserialized-field-that-is-missing-and-one-that
-// && https://play.integer32.com/?gist=62d611b5544077a2471ed6ad68b5ed67&version=stable
-fn deserialize_optional_field<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    Ok(Some(Option::deserialize(deserializer)?))
-}
-
-impl Default for Claims {
-    fn default() -> Self {
-        Claims {
-            aud: vec![String::from("dummy_audience")],
-            exp: 1753717118, // Mon Jul 28 2025 15:38:38 GMT+0000
-            iat: 1627015222, // Fri Jul 23 2021 04:40:22 GMT+0000
-            iss: None,
-            sub: String::from("spiffe://dummy.org/ns:dummy/id:dummy"),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(default)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Claims {
     aud: Vec<String>,
     exp: usize,
-    iat: usize,
-    #[serde(deserialize_with = "deserialize_optional_field")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    iss: Option<Option<String>>,
+    iat: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    iss: Option<String>,
     sub: String,
 }
 
@@ -237,6 +214,18 @@ mod tests {
         }
     }
 
+    impl Default for Claims {
+        fn default() -> Self {
+            Claims {
+                aud: vec![String::from("dummy_audience")],
+                exp: 1753717118, // Mon Jul 28 2025 15:38:38 GMT+0000
+                iat: None,
+                iss: None,
+                sub: String::from("spiffe://dummy.org/ns:dummy/id:dummy"),
+            }
+        }
+    }
+
     struct Setup {
         bundle_p256: JwtBundle,
         bundle_p384: JwtBundle,
@@ -250,6 +239,7 @@ mod tests {
         token_expired: String,
         token_about_to_expire: String,
         token_with_issuer: String,
+        token_with_iat: String,
     }
 
     impl Setup {
@@ -313,6 +303,9 @@ mod tests {
                 token_with_issuer: {
                     generate_token_with_issuer()
                 },
+                token_with_iat: {
+                    generate_token_with_iat()
+                }
             }
         }
     }
@@ -415,7 +408,30 @@ mod tests {
         let priv_key_pem = include_bytes!("../tests/data/priv_key_256v1.pem");
 
         let my_claims = Claims {
-            iss: Some(Some(String::from("user"))),
+            iss: Some(String::from("user")),
+            ..Claims::default()
+        };
+        let header = Header {
+            alg: Algorithm::ES256,
+            kid: Some("dummy_keyid".to_owned()),
+            ..Header::default()
+        };
+
+        let key = openssl::pkey::PKey::private_key_from_pem(priv_key_pem).unwrap();
+        let pem = key.private_key_to_pem_pkcs8().unwrap();
+        encode(
+            &header,
+            &my_claims,
+            &EncodingKey::from_ec_pem(pem.as_slice()).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn generate_token_with_iat() -> String {
+        let priv_key_pem = include_bytes!("../tests/data/priv_key_256v1.pem");
+
+        let my_claims = Claims {
+            iat: Some(1627015222), // Fri Jul 23 2021 04:40:22 GMT+0000
             ..Claims::default()
         };
         let header = Header {
