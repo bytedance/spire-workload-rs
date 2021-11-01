@@ -589,6 +589,18 @@ mod tests {
     }
 
     #[test]
+    fn test_verify_token_with_iat() {
+        let setup = Setup::new();
+        assert!(
+            setup
+                .bundle_p256
+                .verify_token::<JwtPayload>(&setup.token_with_iat)
+                .is_ok(),
+            "Token with iat verification failed"
+        );
+    }
+
+    #[test]
     fn test_verify_spiffe_id_p256() {
         let setup = Setup::new();
         assert!(
