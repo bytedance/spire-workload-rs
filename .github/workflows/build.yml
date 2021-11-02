@@ -52,7 +52,7 @@ jobs:
         run: |
           . ~/.cargo/env && 
           cd $GITHUB_WORKSPACE &&
-          cargo audit
+          cargo audit --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2020-0159
         shell: bash
       - name: cargo clippy
         run: |
