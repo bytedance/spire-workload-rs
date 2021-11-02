@@ -276,16 +276,21 @@ mod tests {
                         inner: bundle_inner,
                     }
                 },
-                // this slot is used to accept public key and test manually, signature verification is doomed to be failed.
+                // this slot is used to accept public key and test manually, signature verification is doomed to be failed 
+                // because we cannot have private key which signs the token.
                 bundle_reserved_slot: {
                     let jwt_key = JwtKey {
                         key_type: String::from("JWT"),
+                        // change key_id here for manual verification
                         key_id: String::from("dummy_keyid"),
                         curve: String::from("P-256"),
+                        // use python3 gen_x_y_from_pubkey_string.py to generate p256 public key and replace x, y here 
+                        // for manual verification
                         x: String::from("ovsRfW7L2V8zyGyJkOLA_JlczbgssQ7JrVQ2pzS74QY"),
                         y: String::from("kO_n1Pz9qbK8gNzfXA4Hfo1K11-Dyl1JilDFYltNyhw"),
                     };
                     let mut bundle_inner = BTreeMap::new();
+                    // change key_id here for manual verification
                     bundle_inner.insert(String::from("dummy_keyid"), jwt_key);
                     JwtBundle{
                         inner: bundle_inner,
@@ -298,6 +303,7 @@ mod tests {
                     generate_token_on_algorithm(Algorithm::ES384)
                 },
                 token_reserved_slot: {
+                    // change this to token to be verified manually.
                     // "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImR1bW15X2tleWlkIn0.eyJhdWQiOlsiZHVtbXlfYXVkaWVuY2UiXSwiZXhwIjoxNzUzNzE3MTE4LCJzdWIiOiJzcGlmZmU6Ly9kdW1teS5vcmcvbnM6ZHVtbXkvaWQ6ZHVtbXkifQ.Js21h6fppSJ4MUjrbk3pvIrJ_ybLD0UvZcA9lldXnaxVEbiB3NBfcOPAaKHaQJN_BYQZiERRyFrUMRprx-MvTQ"
                     String::from("eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImR1bW15X2tleWlkIn0.eyJhdWQiOlsiZHVtbXlfYXVkaWVuY2UiXSwiZXhwIjoxNzUzNzE3MTE4LCJzdWIiOiJzcGlmZmU6Ly9kdW1teS5vcmcvbnM6ZHVtbXkvaWQ6ZHVtbXkifQ.Js21h6fppSJ4MUjrbk3pvIrJ_ybLD0UvZcA9lldXnaxVEbiB3NBfcOPAaKHaQJN_BYQZiERRyFrUMRprx-MvTA")
                 },
