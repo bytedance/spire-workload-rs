@@ -1,0 +1,75 @@
+name: build action
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  schedule: [cron: "40 1 * * *"]
+
+jobs:
+  build-spire-workload-rs:
+    strategy:
+      matrix:
+        runs-on:
+          - ubuntu-latest
+        image:
+          - "ubuntu:latest"
+          - "ubuntu:20.04"
+          - "ubuntu:18.04"
+        build-command:
+          - "cargo build --verbose"
+        test-command:
+          - "cargo test --verbose"
+        cargo-argument:
+          - ""
+          - "--release"
+        rust-toolchain:
+          - "stable"
+    runs-on: ${{ matrix.runs-on }}
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      # Reference the major version of a release
+      - uses: actions/checkout@v1
+        with:
+          submodules: "true"
+      - name: Environment setup
+        run: |
+          cd $HOME && \
+          apt update && DEBIAN_FRONTEND=noninteractive apt install -y curl build-essential openssl libssl-dev pkg-config && \
+          curl 'https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init' --output ./rustup-init && \
+          chmod +x ./rustup-init && \
+          echo '1' | ./rustup-init --default-toolchain ${{ matrix.rust-toolchain }} && \
+          $HOME/.cargo/bin/rustup component add clippy rustfmt && \
+          . ~/.cargo/env && 
+          cargo install cargo-audit &&
+          rustc --version &&
+          rustup --version &&
+          cargo --version
+        shell: bash
+      - name: cargo audit
+        run: |
+          . ~/.cargo/env && 
+          cd $GITHUB_WORKSPACE &&
+          cargo audit --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2020-0159
+        shell: bash
+      - name: cargo clippy
+        run: |
+          . ~/.cargo/env && 
+          cd $GITHUB_WORKSPACE &&
+          cargo clippy
+        shell: bash
+      - name: Run build
+        run: |
+          . ~/.cargo/env && 
+          cd $GITHUB_WORKSPACE &&
+          ${{ matrix.build-command }} ${{ matrix.cargo-argument}}
+        shell: bash
+      - name: Run test
+        run: |
+          . ~/.cargo/env &&  \
+          cd $GITHUB_WORKSPACE && \
+          ${{ matrix.test-command }} ${{ matrix.cargo-argument}} -- --test-threads=1
+        shell: bash
+
