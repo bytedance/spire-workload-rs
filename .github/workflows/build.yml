@@ -68,6 +68,8 @@ jobs:
         shell: bash
       - name: Run test
         run: |
-          ${{ matrix.test-command }}
+          . ~/.cargo/env &&  \
+          cd $GITHUB_WORKSPACE && \
+          ${{ matrix.test-command }} ${{ matrix.cargo-argument}} -- --test-threads=1
         shell: bash
 
