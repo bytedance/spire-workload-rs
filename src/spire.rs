@@ -8,6 +8,7 @@ use futures::future::Either;
 use futures::{Stream, StreamExt};
 use log::*;
 use rustls::Certificate;
+use std::result::Result::Ok;
 use std::sync::Arc;
 use std::{
     collections::HashMap,
