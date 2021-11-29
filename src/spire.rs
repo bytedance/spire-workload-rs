@@ -3,12 +3,11 @@ use super::workload::*;
 use super::{CrlEntry, Identity, CERTIFICATE_REVOKATION_LIST, IDENTITIES, JWT_BUNDLES};
 use crate::der::*;
 use crate::{JwtBundle, SpiffeID};
-use anyhow::*;
+use anyhow::Result;
 use futures::future::Either;
 use futures::{Stream, StreamExt};
 use log::*;
 use rustls::Certificate;
-use std::result::Result::Ok;
 use std::sync::Arc;
 use std::{
     collections::HashMap,
