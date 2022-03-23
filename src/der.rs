@@ -78,10 +78,8 @@ pub fn svid_to_identity(svid: X509svid) -> Result<(SpiffeID, Arc<Identity>)> {
     }
     let cert_key = CertifiedKey::new(
         certs,
-        Arc::new(
-            rustls::sign::any_supported_type(&key)
-                .map_err(|_| anyhow!("unsupport private key type"))?,
-        ),
+        rustls::sign::any_supported_type(&key)
+            .map_err(|_| anyhow!("unsupport private key type"))?,
     );
     let mut root_store = RootCertStore { roots: vec![] };
     for bundle_cert in bundle.iter() {

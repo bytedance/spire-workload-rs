@@ -23,6 +23,7 @@ use anyhow::*;
 use arc_swap::ArcSwap;
 use rustls::{sign::CertifiedKey, PrivateKey};
 use rustls::{Certificate, RootCertStore};
+use rustls::{ClientConfig, ServerConfig};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -51,10 +52,8 @@ impl Identity {
     ) -> Result<Identity> {
         let cert_key = CertifiedKey::new(
             certs,
-            Arc::new(
-                rustls::sign::any_supported_type(&key)
-                    .map_err(|_| anyhow!("unsupported private key type"))?,
-            ),
+            rustls::sign::any_supported_type(&key)
+                .map_err(|_| anyhow!("unsupported private key type"))?,
         );
         let mut root_store = RootCertStore { roots: vec![] };
         for bundle_cert in bundle.iter() {
@@ -135,24 +134,23 @@ pub fn make_client_config(
     authorizer: Box<dyn SpiffeIdAuthorizer>,
     require_server_auth: bool,
 ) -> rustls::ClientConfig {
-    let mut config = rustls::ClientConfig::new();
-    config.key_log = Arc::new(rustls::KeyLogFile::new());
-
-    config.ciphersuites = rustls::ALL_CIPHERSUITES.to_vec();
-
-    config.set_protocols(protocols);
-
     let dyn_resolver_verifier = Arc::new(DynamicLoadedCertResolverVerifier {
         identity,
         authorizer,
         require_client_auth: require_server_auth,
     });
 
-    config
-        .dangerous()
-        .set_certificate_verifier(dyn_resolver_verifier.clone());
+    let mut config = ClientConfig::builder()
+        .with_cipher_suites(rustls::ALL_CIPHER_SUITES)
+        .with_safe_default_kx_groups()
+        .with_safe_default_protocol_versions()
+        .expect("create client config fail")
+        .with_custom_certificate_verifier(dyn_resolver_verifier.clone())
+        .with_no_client_auth();
 
-    config.client_auth_cert_resolver = dyn_resolver_verifier;
+    config.alpn_protocols = Vec::from(protocols.clone());
+    config.key_log = Arc::new(rustls::KeyLogFile::new());
+    config.client_auth_cert_resolver = dyn_resolver_verifier.clone();
 
     config
 }
@@ -169,12 +167,19 @@ pub fn make_server_config(
         require_client_auth,
     });
 
-    let mut config = rustls::ServerConfig::new(dyn_resolver_verifier.clone());
+    let mut config = rustls::ServerConfig::builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_safe_default_protocol_versions()
+        .expect("create server config failed")
+        .with_client_cert_verifier(dyn_resolver_verifier.clone())
+        .with_cert_resolver(dyn_resolver_verifier.clone());
+
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     config.cert_resolver = dyn_resolver_verifier;
 
-    config.set_protocols(protocols);
+    config.alpn_protocols = Vec::from(protocols);
 
     config
 }

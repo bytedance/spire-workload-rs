@@ -1,4 +1,4 @@
-use rustls::{Certificate, RootCertStore, TLSError};
+use rustls::{Certificate, RootCertStore, Error};
 
 pub type CertChainAndRoots<'a, 'b> = (
     webpki::EndEntityCert<'a>,
@@ -21,25 +21,24 @@ pub static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
     &webpki::RSA_PKCS1_3072_8192_SHA384,
 ];
 
-pub fn try_now() -> Result<webpki::Time, TLSError> {
+pub fn try_now() -> Result<webpki::Time, Error> {
     webpki::Time::try_from(std::time::SystemTime::now())
-        .map_err(|_| TLSError::FailedToGetCurrentTime)
+        .map_err(|_| Error::FailedToGetCurrentTime)
 }
 
 pub fn prepare<'a, 'b>(
     roots: &'b RootCertStore,
-    presented_certs: &'a [Certificate],
-) -> Result<CertChainAndRoots<'a, 'b>, TLSError> {
-    if presented_certs.is_empty() {
-        return Err(TLSError::NoCertificatesPresented);
+    end_entity: &'a Certificate,
+    intermediates: &'a [Certificate],
+) -> Result<CertChainAndRoots<'a, 'b>, Error> {
+    if intermediates.is_empty() || end_entity.0.is_empty() {
+        return Err(Error::NoCertificatesPresented);
     }
-
     // EE cert must appear first.
-    let cert = webpki::EndEntityCert::from(&presented_certs[0].0).map_err(TLSError::WebPKIError)?;
+    let cert = webpki::EndEntityCert::from(&end_entity.0).map_err(|_| Error::InvalidCertificateData("Invalid Cert".to_owned()))?;
 
-    let chain: Vec<&'a [u8]> = presented_certs
+    let chain: Vec<&'a [u8]> = intermediates
         .iter()
-        .skip(1)
         .map(|cert| cert.0.as_ref())
         .collect();
 

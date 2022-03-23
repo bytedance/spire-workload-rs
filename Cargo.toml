@@ -18,7 +18,7 @@ tokio = { version = "1.1", features = ["full"] }
 tokio-rustls = { version = "0.22" }
 log = "0.4"
 env_logger = "0.8"
-rustls = { version = "0.19", features = ["dangerous_configuration"] }
+rustls = { version = "0.20.4", features = ["dangerous_configuration"] }
 webpki = "0.21"
 lazy_static = "1.4"
 arc-swap = "1.2"
