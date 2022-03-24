@@ -41,7 +41,7 @@ pub fn prepare<'a, 'b>(
     let chain: Vec<&'a [u8]> = intermediates.iter().map(|cert| cert.0.as_ref()).collect();
 
     // since the OwnedTrustAnchor::to_trust_anchor is private,
-    // need to use webpki::cert_der_as_trust_anchor to parse from u8 again
+    // need to use webpki::cert_der_as_trust_anchor to parse from Vec<u8> again
     let trustroots = raw_bundles
         .iter()
         .filter_map(|x| webpki::trust_anchor_util::cert_der_as_trust_anchor(&x).ok())

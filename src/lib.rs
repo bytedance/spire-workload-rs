@@ -140,6 +140,7 @@ pub fn make_client_config(
         require_client_auth: require_server_auth,
     });
 
+    //TODO: might need to fix the expect() here
     let mut config = ClientConfig::builder()
         .with_cipher_suites(rustls::ALL_CIPHER_SUITES)
         .with_safe_default_kx_groups()
@@ -167,6 +168,7 @@ pub fn make_server_config(
         require_client_auth,
     });
 
+    //TODO: might need to fix the expect() here
     let mut config = rustls::ServerConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
