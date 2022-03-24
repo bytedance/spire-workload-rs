@@ -56,6 +56,24 @@ impl DynamicLoadedCertResolverVerifier {
             }
         }
     }
+
+    fn resolve_raw_root_bundle<'a>(&self) -> Option<Vec<Vec<u8>>> {
+        let identities = IDENTITIES.load();
+        let identity = match self.identity.as_ref() {
+            Some(identity) => identities.get(identity),
+            None => identities.iter().next().map(|x| x.1),
+        };
+        match identity {
+            Some(identity) => Some(identity.raw_bundle.clone()),
+            None => {
+                match self.identity.as_ref() {
+                    Some(identity) => error!("the bundle accompanying identity '{}' has disappeared! rejecting all peer connections.", identity),
+                    None => error!("no identities are available! rejecting all peer connections."),
+                }
+                None
+            }
+        }
+    }
 }
 
 impl rustls::client::ResolvesClientCert for DynamicLoadedCertResolverVerifier {
@@ -106,7 +124,17 @@ impl rustls::server::ClientCertVerifier for DynamicLoadedCertResolverVerifier {
                 ));
             }
         };
-        let (cert, chain, trustroots) = pki::prepare(&*roots, &end_entity, &intermediates)?;
+        let raw_roots_bundle = match self.resolve_raw_root_bundle() {
+            Some(x) => x,
+            None => {
+                return Err(Error::General(
+                    "no identities are available, try again later".to_string(),
+                ))
+            }
+        };
+
+        let (cert, chain, trustroots) =
+            pki::prepare(&*roots, &raw_roots_bundle, &end_entity, &intermediates)?;
         let time = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
         cert.verify_is_valid_tls_client_cert(
             pki::SUPPORTED_SIG_ALGS,
@@ -153,8 +181,16 @@ impl rustls::client::ServerCertVerifier for DynamicLoadedCertResolverVerifier {
                 ));
             }
         };
-
-        let (cert, chain, trustroots) = pki::prepare(&*roots, end_entity, intermediates)?;
+        let raw_roots_bundle = match self.resolve_raw_root_bundle() {
+            Some(x) => x,
+            None => {
+                return Err(Error::General(
+                    "no identities are available, try again later".to_string(),
+                ))
+            }
+        };
+        let (cert, chain, trustroots) =
+            pki::prepare(&*roots, &raw_roots_bundle, &end_entity, intermediates)?;
         let now = pki::try_now()?;
         cert.verify_is_valid_tls_server_cert(
             pki::SUPPORTED_SIG_ALGS,

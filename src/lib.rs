@@ -148,7 +148,7 @@ pub fn make_client_config(
         .with_custom_certificate_verifier(dyn_resolver_verifier.clone())
         .with_no_client_auth();
 
-    config.alpn_protocols = Vec::from(protocols.clone());
+    // config.alpn_protocols = Vec::from(&(*protocols).clone());
     config.key_log = Arc::new(rustls::KeyLogFile::new());
     config.client_auth_cert_resolver = dyn_resolver_verifier.clone();
 
