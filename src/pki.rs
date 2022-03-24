@@ -1,5 +1,4 @@
 use rustls::{Certificate, Error, RootCertStore};
-use webpki::TrustAnchor;
 
 pub type CertChainAndRoots<'a, 'b> = (
     webpki::EndEntityCert<'a>,
@@ -43,12 +42,10 @@ pub fn prepare<'a, 'b>(
 
     // since the OwnedTrustAnchor::to_trust_anchor is private,
     // need to use webpki::cert_der_as_trust_anchor to parse from u8 again
-
-    let trust_anchor = webpki::trust_anchor_util::cert_der_as_trust_anchor(&end_entity.0);
-
-    let mut trustroots = raw_bundles
+    let trustroots = raw_bundles
         .iter()
         .filter_map(|x| webpki::trust_anchor_util::cert_der_as_trust_anchor(&x).ok())
         .collect();
+
     Ok((cert, chain, trustroots))
 }

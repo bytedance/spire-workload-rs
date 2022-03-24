@@ -21,9 +21,9 @@ pub use spiffe::{SpiffeID, SpiffeIDMatcher};
 use crate::der::parse_der_cert_chain;
 use anyhow::*;
 use arc_swap::ArcSwap;
+use rustls::ClientConfig;
 use rustls::{sign::CertifiedKey, PrivateKey};
 use rustls::{Certificate, RootCertStore};
-use rustls::{ClientConfig, ServerConfig};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -148,7 +148,7 @@ pub fn make_client_config(
         .with_custom_certificate_verifier(dyn_resolver_verifier.clone())
         .with_no_client_auth();
 
-    // config.alpn_protocols = Vec::from(&(*protocols).clone());
+    config.alpn_protocols = protocols.to_vec();
     config.key_log = Arc::new(rustls::KeyLogFile::new());
     config.client_auth_cert_resolver = dyn_resolver_verifier.clone();
 

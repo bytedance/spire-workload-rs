@@ -15,7 +15,7 @@ path = "src/lib.rs"
 [dependencies]
 tonic = { version = "0.5", features = ["tls"] }
 tokio = { version = "1.1", features = ["full"] }
-tokio-rustls = { version = "0.22" }
+tokio-rustls = { version = "0.23.3" }
 log = "0.4"
 env_logger = "0.8"
 rustls = { version = "0.20.4", features = ["dangerous_configuration"] }

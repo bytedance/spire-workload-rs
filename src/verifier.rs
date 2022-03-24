@@ -171,7 +171,7 @@ impl rustls::client::ServerCertVerifier for DynamicLoadedCertResolverVerifier {
         _server_name: &ServerName,
         _scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp_response: &[u8],
-        now: SystemTime,
+        _now: SystemTime,
     ) -> StdResult<ServerCertVerified, Error> {
         let roots = match self.resolve_roots() {
             Some(x) => x,
@@ -229,6 +229,7 @@ pub mod test {
     use rustls::sign::CertifiedKey;
     use rustls::PrivateKey;
     use std::collections::BTreeMap;
+    use std::convert::TryInto;
     use std::net::SocketAddr;
     use std::sync::Arc;
     use tokio::net::{TcpListener, TcpStream};
@@ -336,7 +337,7 @@ pub mod test {
             let (stream, _) = listener.accept().await.unwrap();
             let _ = acceptor.clone().accept(stream).await.unwrap();
         });
-        let dnsname = DNSNameRef::try_from_ascii_str("spiffe-test").unwrap();
+        let servername: rustls::ServerName = "spiffe-test".try_into().unwrap();
         // pass test
         {
             let config = TlsConnector::from(Arc::new(make_client_config(
@@ -347,7 +348,7 @@ pub mod test {
             )));
 
             let stream = TcpStream::connect(addr.clone()).await.unwrap();
-            let _ = config.connect(dnsname.clone(), stream).await.unwrap();
+            let _ = config.connect(servername.clone(), stream).await.unwrap();
         }
         // pass test
         {
@@ -359,7 +360,7 @@ pub mod test {
             )));
 
             let stream = TcpStream::connect(addr.clone()).await.unwrap();
-            let _ = config.connect(dnsname.clone(), stream).await.unwrap();
+            let _ = config.connect(servername.clone(), stream).await.unwrap();
         }
         // fail test
         {
@@ -371,7 +372,10 @@ pub mod test {
             )));
 
             let stream = TcpStream::connect(addr.clone()).await.unwrap();
-            let _ = config.connect(dnsname.clone(), stream).await.unwrap_err();
+            let _ = config
+                .connect(servername.clone(), stream)
+                .await
+                .unwrap_err();
         }
     }
 }
