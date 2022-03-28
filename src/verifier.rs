@@ -143,7 +143,7 @@ impl rustls::server::ClientCertVerifier for DynamicLoadedCertResolverVerifier {
             time,
         )
         .map_err(|_| Error::General(webpki::Error::InvalidCertValidity.to_string()))?;
-        if intermediates.len() == 0 {
+        if intermediates.len() == 0 && end_entity.0.is_empty() {
             return Err(Error::General(
                 webpki::Error::ExtensionValueInvalid.to_string(),
             ));
@@ -204,7 +204,7 @@ impl rustls::client::ServerCertVerifier for DynamicLoadedCertResolverVerifier {
             debug!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
         }
 
-        if intermediates.len() == 0 {
+        if intermediates.len() == 0 && end_entity.0.is_empty() {
             return Err(Error::General(
                 webpki::Error::ExtensionValueInvalid.to_string(),
             ));

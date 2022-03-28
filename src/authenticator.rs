@@ -5,6 +5,7 @@ pub trait SpiffeIdAuthorizer: Send + Sync + 'static {
 
     fn validate_raw(&self, spiffe_id: &str) -> bool {
         let spiffe_id = spiffe_id.parse();
+
         if spiffe_id.is_err() {
             return false;
         }

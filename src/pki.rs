@@ -31,9 +31,10 @@ pub fn prepare<'a, 'b>(
     end_entity: &'a Certificate,
     intermediates: &'a [Certificate],
 ) -> Result<CertChainAndRoots<'a, 'b>, Error> {
-    if intermediates.is_empty() || end_entity.0.is_empty() {
+    if intermediates.is_empty() && end_entity.0.is_empty() {
         return Err(Error::NoCertificatesPresented);
     }
+
     // EE cert must appear first.
     let cert = webpki::EndEntityCert::from(&end_entity.0)
         .map_err(|_| Error::InvalidCertificateData("Invalid Cert".to_owned()))?;
