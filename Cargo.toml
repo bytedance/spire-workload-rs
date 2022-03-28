@@ -1,6 +1,6 @@
 [package]
 name = "spire-workload"
-version = "1.1.4"
+version = "1.1.5"
 authors = ["Maxwell Bruce", "Yu Ding", "Ruide Zhang"]
 edition = "2018"
 build = "build.rs"
@@ -15,10 +15,10 @@ path = "src/lib.rs"
 [dependencies]
 tonic = { version = "0.5", features = ["tls"] }
 tokio = { version = "1.1", features = ["full"] }
-tokio-rustls = { version = "0.22" }
+tokio-rustls = { version = "0.23" }
 log = "0.4"
 env_logger = "0.8"
-rustls = { version = "0.19", features = ["dangerous_configuration"] }
+rustls = { version = "0.20", features = ["dangerous_configuration"] }
 webpki = "0.21"
 lazy_static = "1.4"
 arc-swap = "1.2"

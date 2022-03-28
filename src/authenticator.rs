@@ -4,15 +4,12 @@ pub trait SpiffeIdAuthorizer: Send + Sync + 'static {
     fn validate(&self, spiffe_id: SpiffeID) -> bool;
 
     fn validate_raw(&self, spiffe_id: &str) -> bool {
-        let spiffe_id = spiffe_id.parse();
-        if spiffe_id.is_err() {
-            return false;
+        if let Ok(spiffe_id) = spiffe_id.parse() {
+            if let Ok(id) = SpiffeID::new(spiffe_id) {
+                return self.validate(id);
+            }
         }
-        let spiffe_id = SpiffeID::new(spiffe_id.unwrap());
-        if spiffe_id.is_err() {
-            return false;
-        }
-        self.validate(spiffe_id.unwrap())
+        false
     }
 }
 

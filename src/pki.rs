@@ -1,4 +1,4 @@
-use rustls::{Certificate, RootCertStore, TLSError};
+use rustls::{Certificate, Error, RootCertStore};
 
 pub type CertChainAndRoots<'a, 'b> = (
     webpki::EndEntityCert<'a>,
@@ -21,30 +21,32 @@ pub static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
     &webpki::RSA_PKCS1_3072_8192_SHA384,
 ];
 
-pub fn try_now() -> Result<webpki::Time, TLSError> {
-    webpki::Time::try_from(std::time::SystemTime::now())
-        .map_err(|_| TLSError::FailedToGetCurrentTime)
+pub fn try_now() -> Result<webpki::Time, Error> {
+    webpki::Time::try_from(std::time::SystemTime::now()).map_err(|_| Error::FailedToGetCurrentTime)
 }
 
 pub fn prepare<'a, 'b>(
-    roots: &'b RootCertStore,
-    presented_certs: &'a [Certificate],
-) -> Result<CertChainAndRoots<'a, 'b>, TLSError> {
-    if presented_certs.is_empty() {
-        return Err(TLSError::NoCertificatesPresented);
+    _roots: &'b RootCertStore,
+    raw_bundles: &'b Vec<Vec<u8>>,
+    end_entity: &'a Certificate,
+    intermediates: &'a [Certificate],
+) -> Result<CertChainAndRoots<'a, 'b>, Error> {
+    if intermediates.is_empty() && end_entity.0.is_empty() {
+        return Err(Error::NoCertificatesPresented);
     }
 
     // EE cert must appear first.
-    let cert = webpki::EndEntityCert::from(&presented_certs[0].0).map_err(TLSError::WebPKIError)?;
+    let cert = webpki::EndEntityCert::from(&end_entity.0)
+        .map_err(|_| Error::InvalidCertificateData("Invalid Cert".to_owned()))?;
 
-    let chain: Vec<&'a [u8]> = presented_certs
+    let chain: Vec<&'a [u8]> = intermediates.iter().map(|cert| cert.0.as_ref()).collect();
+
+    // since the OwnedTrustAnchor::to_trust_anchor is private,
+    // need to use webpki::cert_der_as_trust_anchor to parse from Vec<u8> again
+    let trustroots = raw_bundles
         .iter()
-        .skip(1)
-        .map(|cert| cert.0.as_ref())
+        .filter_map(|x| webpki::trust_anchor_util::cert_der_as_trust_anchor(&x).ok())
         .collect();
-
-    let trustroots: Vec<webpki::TrustAnchor> =
-        roots.roots.iter().map(|r| r.to_trust_anchor()).collect();
 
     Ok((cert, chain, trustroots))
 }

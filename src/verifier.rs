@@ -2,11 +2,14 @@ use super::{SpiffeIdAuthorizer, IDENTITIES};
 use crate::pki;
 use crate::SpiffeID;
 use log::*;
+use rustls::client::ServerCertVerified;
+use rustls::server::ClientCertVerified;
 use rustls::sign::CertifiedKey;
-use rustls::{Certificate, ClientCertVerified, RootCertStore, ServerCertVerified, TLSError};
+use rustls::{Certificate, Error, RootCertStore, ServerName};
 use std::result::Result as StdResult;
 use std::sync::Arc;
-use webpki::{DNSName, DNSNameRef, TLSClientTrustAnchors, TLSServerTrustAnchors};
+use std::time::SystemTime;
+use webpki::{TLSClientTrustAnchors, TLSServerTrustAnchors};
 
 pub(crate) struct DynamicLoadedCertResolverVerifier {
     pub(crate) identity: Option<SpiffeID>,
@@ -53,15 +56,33 @@ impl DynamicLoadedCertResolverVerifier {
             }
         }
     }
+
+    fn resolve_raw_root_bundle<'a>(&self) -> Option<Vec<Vec<u8>>> {
+        let identities = IDENTITIES.load();
+        let identity = match self.identity.as_ref() {
+            Some(identity) => identities.get(identity),
+            None => identities.iter().next().map(|x| x.1),
+        };
+        match identity {
+            Some(identity) => Some(identity.raw_bundle.clone()),
+            None => {
+                match self.identity.as_ref() {
+                    Some(identity) => error!("the bundle accompanying identity '{}' has disappeared! rejecting all peer connections.", identity),
+                    None => error!("no identities are available! rejecting all peer connections."),
+                }
+                None
+            }
+        }
+    }
 }
 
-impl rustls::ResolvesClientCert for DynamicLoadedCertResolverVerifier {
+impl rustls::client::ResolvesClientCert for DynamicLoadedCertResolverVerifier {
     fn resolve(
         &self,
         _acceptable_issuers: &[&[u8]],
         _sigschemes: &[rustls::SignatureScheme],
-    ) -> Option<CertifiedKey> {
-        self.resolve_cert_key().map(|x| (&*x).clone())
+    ) -> Option<Arc<CertifiedKey>> {
+        self.resolve_cert_key().map(|x| Arc::new((&*x).clone()))
     }
 
     fn has_certs(&self) -> bool {
@@ -69,88 +90,107 @@ impl rustls::ResolvesClientCert for DynamicLoadedCertResolverVerifier {
     }
 }
 
-impl rustls::ResolvesServerCert for DynamicLoadedCertResolverVerifier {
-    fn resolve(&self, _client_hello: rustls::ClientHello) -> Option<CertifiedKey> {
-        self.resolve_cert_key().map(|x| (&*x).clone())
+impl rustls::server::ResolvesServerCert for DynamicLoadedCertResolverVerifier {
+    fn resolve(&self, _client_hello: rustls::server::ClientHello) -> Option<Arc<CertifiedKey>> {
+        self.resolve_cert_key().map(|x| Arc::new((&*x).clone()))
     }
 }
 
-impl rustls::ClientCertVerifier for DynamicLoadedCertResolverVerifier {
+impl rustls::server::ClientCertVerifier for DynamicLoadedCertResolverVerifier {
     fn offer_client_auth(&self) -> bool {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&DNSName>) -> Option<bool> {
+    fn client_auth_mandatory(&self) -> Option<bool> {
         Some(self.require_client_auth)
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        _sni: Option<&DNSName>,
-    ) -> Option<rustls::DistinguishedNames> {
+    fn client_auth_root_subjects(&self) -> Option<rustls::DistinguishedNames> {
         let roots = self.resolve_roots();
-        roots.map(|x| x.get_subjects())
+        roots.map(|x| x.subjects())
     }
 
     fn verify_client_cert(
         &self,
-        presented_certs: &[Certificate],
-        _sni: Option<&DNSName>,
-    ) -> StdResult<rustls::ClientCertVerified, TLSError> {
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
+        now: SystemTime,
+    ) -> StdResult<rustls::server::ClientCertVerified, Error> {
         let roots = match self.resolve_roots() {
             Some(x) => x,
             None => {
-                return Err(TLSError::General(
+                return Err(Error::General(
                     "no identities are available, try again later".to_string(),
                 ));
             }
         };
+        let raw_roots_bundle = match self.resolve_raw_root_bundle() {
+            Some(x) => x,
+            None => {
+                return Err(Error::General(
+                    "no identities are available, try again later".to_string(),
+                ))
+            }
+        };
 
-        let (cert, chain, trustroots) = pki::prepare(&*roots, presented_certs)?;
-        let now = pki::try_now()?;
-
+        let (cert, chain, trustroots) =
+            pki::prepare(&*roots, &raw_roots_bundle, &end_entity, &intermediates)?;
+        let time = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
         cert.verify_is_valid_tls_client_cert(
             pki::SUPPORTED_SIG_ALGS,
             &TLSClientTrustAnchors(&trustroots),
             &chain,
-            now,
+            time,
         )
-        .map_err(TLSError::WebPKIError)?;
-
-        if presented_certs.len() == 0 {
-            return Err(TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid));
+        .map_err(|_| Error::General(webpki::Error::InvalidCertValidity.to_string()))?;
+        if intermediates.len() == 0 && end_entity.0.is_empty() {
+            return Err(Error::General(
+                webpki::Error::ExtensionValueInvalid.to_string(),
+            ));
         }
-        let spiffe_id = SpiffeID::raw_from_x509_der(&presented_certs[0].0[..])
-            .map_err(|_| TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid))?;
+        let spiffe_id = SpiffeID::raw_from_x509_der(&end_entity.0)
+            .map_err(|_| Error::General(webpki::Error::ExtensionValueInvalid.to_string()))?;
         if !self.authorizer.validate_raw(&spiffe_id) {
-            return Err(TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid));
+            return Err(Error::General(
+                webpki::Error::ExtensionValueInvalid.to_string(),
+            ));
         }
 
         Ok(ClientCertVerified::assertion())
     }
 }
 
-impl rustls::ServerCertVerifier for DynamicLoadedCertResolverVerifier {
+impl rustls::client::ServerCertVerifier for DynamicLoadedCertResolverVerifier {
     /// Will verify the certificate is valid in the following ways:
     /// - Signed by a trusted `RootCertStore` CA
     /// - Not Expired
     fn verify_server_cert(
         &self,
-        _roots: &RootCertStore,
-        presented_certs: &[Certificate],
-        _dns_name: DNSNameRef,
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
+        _server_name: &ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp_response: &[u8],
-    ) -> StdResult<ServerCertVerified, TLSError> {
+        _now: SystemTime,
+    ) -> StdResult<ServerCertVerified, Error> {
         let roots = match self.resolve_roots() {
             Some(x) => x,
             None => {
-                return Err(TLSError::General(
+                return Err(Error::General(
                     "no identities are available, try again later".to_string(),
                 ));
             }
         };
-
-        let (cert, chain, trustroots) = pki::prepare(&*roots, presented_certs)?;
+        let raw_roots_bundle = match self.resolve_raw_root_bundle() {
+            Some(x) => x,
+            None => {
+                return Err(Error::General(
+                    "no identities are available, try again later".to_string(),
+                ))
+            }
+        };
+        let (cert, chain, trustroots) =
+            pki::prepare(&*roots, &raw_roots_bundle, &end_entity, intermediates)?;
         let now = pki::try_now()?;
         cert.verify_is_valid_tls_server_cert(
             pki::SUPPORTED_SIG_ALGS,
@@ -158,19 +198,23 @@ impl rustls::ServerCertVerifier for DynamicLoadedCertResolverVerifier {
             &chain,
             now,
         )
-        .map_err(TLSError::WebPKIError)?;
+        .map_err(|_| Error::General(webpki::Error::InvalidCertValidity.to_string()))?;
 
         if !ocsp_response.is_empty() {
             debug!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
         }
 
-        if presented_certs.len() == 0 {
-            return Err(TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid));
+        if intermediates.len() == 0 && end_entity.0.is_empty() {
+            return Err(Error::General(
+                webpki::Error::ExtensionValueInvalid.to_string(),
+            ));
         }
-        let spiffe_id = SpiffeID::raw_from_x509_der(&presented_certs[0].0[..])
-            .map_err(|_| TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid))?;
+        let spiffe_id = SpiffeID::raw_from_x509_der(&end_entity.0)
+            .map_err(|_| Error::General(webpki::Error::ExtensionValueInvalid.to_string()))?;
         if !self.authorizer.validate_raw(&spiffe_id) {
-            return Err(TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid));
+            return Err(Error::General(
+                webpki::Error::ExtensionValueInvalid.to_string(),
+            ));
         }
 
         Ok(ServerCertVerified::assertion())
@@ -185,6 +229,7 @@ pub mod test {
     use rustls::sign::CertifiedKey;
     use rustls::PrivateKey;
     use std::collections::BTreeMap;
+    use std::convert::TryInto;
     use std::net::SocketAddr;
     use std::sync::Arc;
     use tokio::net::{TcpListener, TcpStream};
@@ -199,11 +244,9 @@ pub mod test {
     pub fn rustlsify(key: Vec<u8>, cert: Vec<u8>) -> CertifiedKey {
         CertifiedKey::new(
             vec![rustls::Certificate(cert)],
-            Arc::new(
-                rustls::sign::any_ecdsa_type(&PrivateKey(key))
-                    .map_err(|_| anyhow!("unsupport private key type"))
-                    .unwrap(),
-            ),
+            rustls::sign::any_ecdsa_type(&PrivateKey(key))
+                .map_err(|_| anyhow!("unsupport private key type"))
+                .unwrap(),
         )
     }
 
@@ -294,7 +337,7 @@ pub mod test {
             let (stream, _) = listener.accept().await.unwrap();
             let _ = acceptor.clone().accept(stream).await.unwrap();
         });
-        let dnsname = DNSNameRef::try_from_ascii_str("spiffe-test").unwrap();
+        let servername: rustls::ServerName = "spiffe-test".try_into().unwrap();
         // pass test
         {
             let config = TlsConnector::from(Arc::new(make_client_config(
@@ -305,7 +348,7 @@ pub mod test {
             )));
 
             let stream = TcpStream::connect(addr.clone()).await.unwrap();
-            let _ = config.connect(dnsname.clone(), stream).await.unwrap();
+            let _ = config.connect(servername.clone(), stream).await.unwrap();
         }
         // pass test
         {
@@ -317,7 +360,7 @@ pub mod test {
             )));
 
             let stream = TcpStream::connect(addr.clone()).await.unwrap();
-            let _ = config.connect(dnsname.clone(), stream).await.unwrap();
+            let _ = config.connect(servername.clone(), stream).await.unwrap();
         }
         // fail test
         {
@@ -329,7 +372,10 @@ pub mod test {
             )));
 
             let stream = TcpStream::connect(addr.clone()).await.unwrap();
-            let _ = config.connect(dnsname.clone(), stream).await.unwrap_err();
+            let _ = config
+                .connect(servername.clone(), stream)
+                .await
+                .unwrap_err();
         }
     }
 }
