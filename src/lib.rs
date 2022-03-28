@@ -151,7 +151,7 @@ pub fn make_client_config(
 
     config.alpn_protocols = protocols.to_vec();
     config.key_log = Arc::new(rustls::KeyLogFile::new());
-    config.client_auth_cert_resolver = dyn_resolver_verifier.clone();
+    config.client_auth_cert_resolver = dyn_resolver_verifier;
 
     config
 }
