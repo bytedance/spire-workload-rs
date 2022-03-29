@@ -27,7 +27,7 @@ pub fn try_now() -> Result<webpki::Time, Error> {
 
 pub fn prepare<'a, 'b>(
     _roots: &'b RootCertStore,
-    raw_bundles: &'b Vec<Vec<u8>>,
+    raw_bundles: &'b [Vec<u8>],
     end_entity: &'a Certificate,
     intermediates: &'a [Certificate],
 ) -> Result<CertChainAndRoots<'a, 'b>, Error> {
@@ -45,7 +45,7 @@ pub fn prepare<'a, 'b>(
     // need to use webpki::cert_der_as_trust_anchor to parse from Vec<u8> again
     let trustroots = raw_bundles
         .iter()
-        .filter_map(|x| webpki::trust_anchor_util::cert_der_as_trust_anchor(&x).ok())
+        .filter_map(|x| webpki::trust_anchor_util::cert_der_as_trust_anchor(x).ok())
         .collect();
 
     Ok((cert, chain, trustroots))

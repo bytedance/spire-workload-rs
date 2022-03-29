@@ -57,7 +57,7 @@ impl DynamicLoadedCertResolverVerifier {
         }
     }
 
-    fn resolve_raw_root_bundle<'a>(&self) -> Option<Vec<Vec<u8>>> {
+    fn resolve_raw_root_bundle(&self) -> Option<Vec<Vec<u8>>> {
         let identities = IDENTITIES.load();
         let identity = match self.identity.as_ref() {
             Some(identity) => identities.get(identity),
@@ -134,7 +134,7 @@ impl rustls::server::ClientCertVerifier for DynamicLoadedCertResolverVerifier {
         };
 
         let (cert, chain, trustroots) =
-            pki::prepare(&*roots, &raw_roots_bundle, &end_entity, &intermediates)?;
+            pki::prepare(&*roots, &raw_roots_bundle, end_entity, intermediates)?;
         let time = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
         cert.verify_is_valid_tls_client_cert(
             pki::SUPPORTED_SIG_ALGS,
@@ -190,7 +190,7 @@ impl rustls::client::ServerCertVerifier for DynamicLoadedCertResolverVerifier {
             }
         };
         let (cert, chain, trustroots) =
-            pki::prepare(&*roots, &raw_roots_bundle, &end_entity, intermediates)?;
+            pki::prepare(&*roots, &raw_roots_bundle, end_entity, intermediates)?;
         let now = pki::try_now()?;
         cert.verify_is_valid_tls_server_cert(
             pki::SUPPORTED_SIG_ALGS,
