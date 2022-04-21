@@ -52,7 +52,7 @@ async fn prepare_spire_jwt_bundle_stream(
 }
 
 struct MergedStreams<T> {
-    inner: Vec<Pin<Box<dyn Stream<Item = T> + Send + Sync>>>,
+    inner: Vec<Pin<Box<dyn Stream<Item = T> + Send>>>,
 }
 
 impl<T> Stream for MergedStreams<T> {
@@ -77,7 +77,7 @@ impl<T> MergedStreams<T> {
         Self { inner: vec![] }
     }
 
-    pub fn add_stream<S: Stream<Item = T> + Send + Sync + 'static>(&mut self, stream: S) {
+    pub fn add_stream<S: Stream<Item = T> + Send + 'static>(&mut self, stream: S) {
         self.inner.push(Box::pin(stream));
     }
 }
