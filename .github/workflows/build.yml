@@ -37,7 +37,7 @@ jobs:
       - name: Environment setup
         run: |
           cd $HOME && \
-          apt update && DEBIAN_FRONTEND=noninteractive apt install -y curl build-essential openssl libssl-dev pkg-config && \
+          apt update && DEBIAN_FRONTEND=noninteractive apt install -y curl build-essential openssl libssl-dev pkg-config cmake && \
           curl 'https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init' --output ./rustup-init && \
           chmod +x ./rustup-init && \
           echo '1' | ./rustup-init --default-toolchain ${{ matrix.rust-toolchain }} && \
