@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use rustls::{Certificate, Error, RootCertStore};
 
 pub type CertChainAndRoots<'a, 'b> = (
@@ -36,7 +37,7 @@ pub fn prepare<'a, 'b>(
     }
 
     // EE cert must appear first.
-    let cert = webpki::EndEntityCert::from(&end_entity.0)
+    let cert = webpki::EndEntityCert::try_from(&end_entity.0[..])
         .map_err(|_| Error::InvalidCertificateData("Invalid Cert".to_owned()))?;
 
     let chain: Vec<&'a [u8]> = intermediates.iter().map(|cert| cert.0.as_ref()).collect();
@@ -45,7 +46,7 @@ pub fn prepare<'a, 'b>(
     // need to use webpki::cert_der_as_trust_anchor to parse from Vec<u8> again
     let trustroots = raw_bundles
         .iter()
-        .filter_map(|x| webpki::trust_anchor_util::cert_der_as_trust_anchor(x).ok())
+        .filter_map(|x| webpki::TrustAnchor::try_from_cert_der(x).ok())
         .collect();
 
     Ok((cert, chain, trustroots))

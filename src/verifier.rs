@@ -9,7 +9,8 @@ use rustls::{Certificate, Error, RootCertStore, ServerName};
 use std::result::Result as StdResult;
 use std::sync::Arc;
 use std::time::SystemTime;
-use webpki::{TLSClientTrustAnchors, TLSServerTrustAnchors};
+use std::convert::TryFrom;
+use webpki::{TlsClientTrustAnchors, TlsServerTrustAnchors};
 
 pub(crate) struct DynamicLoadedCertResolverVerifier {
     pub(crate) identity: Option<SpiffeID>,
@@ -138,7 +139,7 @@ impl rustls::server::ClientCertVerifier for DynamicLoadedCertResolverVerifier {
         let time = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
         cert.verify_is_valid_tls_client_cert(
             pki::SUPPORTED_SIG_ALGS,
-            &TLSClientTrustAnchors(&trustroots),
+            &TlsClientTrustAnchors(&trustroots),
             &chain,
             time,
         )
@@ -194,7 +195,7 @@ impl rustls::client::ServerCertVerifier for DynamicLoadedCertResolverVerifier {
         let now = pki::try_now()?;
         cert.verify_is_valid_tls_server_cert(
             pki::SUPPORTED_SIG_ALGS,
-            &TLSServerTrustAnchors(&trustroots),
+            &TlsServerTrustAnchors(&trustroots),
             &chain,
             now,
         )
