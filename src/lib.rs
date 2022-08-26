@@ -27,6 +27,7 @@ use rustls::{Certificate, RootCertStore};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::RwLock;
 use tokio::sync::watch::{channel, Receiver, Sender};
 use verifier::DynamicLoadedCertResolverVerifier;
 
@@ -103,6 +104,9 @@ lazy_static! {
     pub static ref JWT_BUNDLES: ArcSwap<BTreeMap<String, Arc<JwtBundle>>> = ArcSwap::new(Arc::new(BTreeMap::new()));
     // unused
     pub static ref CERTIFICATE_REVOKATION_LIST: ArcSwap<BTreeSet<CrlEntry>> = ArcSwap::new(Arc::new(BTreeSet::new()));
+
+    pub static ref SPIFFEID_SEPARATOR: RwLock<String> = RwLock::new(":".to_string());
+    pub static ref VALID_SPIFFEID_SEPARATORS: Vec<char> = vec![':', '-', '.', '_'];
 }
 
 pub async fn wait_for_identity_update(current_version: Option<u64>) -> Option<u64> {
@@ -184,4 +188,20 @@ pub fn make_server_config(
     config.alpn_protocols = Vec::from(protocols);
 
     config
+}
+
+pub fn set_spiffe_separator(
+    separator: &str
+) -> Result<()>{
+    if separator.len() != 1 {
+        return Err(anyhow!("invalid spiffe separator length: {}", separator.len()));
+    }
+
+    if !VALID_SPIFFEID_SEPARATORS.contains(&separator.chars().next().unwrap()){
+        return Err(anyhow!("invalid spiffe separator char: {}", separator));
+    }
+
+    let mut spiffeid_separator = SPIFFEID_SEPARATOR.write().unwrap();
+    *spiffeid_separator = separator.to_owned();
+    Ok(())
 }
