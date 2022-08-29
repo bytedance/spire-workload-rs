@@ -25,9 +25,8 @@ use rustls::ClientConfig;
 use rustls::{sign::CertifiedKey, PrivateKey};
 use rustls::{Certificate, RootCertStore};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::sync::RwLock;
 use tokio::sync::watch::{channel, Receiver, Sender};
 use verifier::DynamicLoadedCertResolverVerifier;
 
@@ -97,6 +96,7 @@ impl Ord for CrlEntry {
 }
 
 pub static CURRENT_IDENTITY_VERSION: AtomicU64 = AtomicU64::new(0);
+pub static SPIFFEID_SEPARATOR: AtomicU8 = AtomicU8::new(58);
 
 lazy_static! {
     pub(crate) static ref IDENTITY_UPDATE_WATCHER: (Sender<u64>, Receiver<u64>) = channel(0);
@@ -105,7 +105,6 @@ lazy_static! {
     // unused
     pub static ref CERTIFICATE_REVOKATION_LIST: ArcSwap<BTreeSet<CrlEntry>> = ArcSwap::new(Arc::new(BTreeSet::new()));
 
-    pub static ref SPIFFEID_SEPARATOR: RwLock<String> = RwLock::new(":".to_string());
     pub static ref VALID_SPIFFEID_SEPARATORS: Vec<char> = vec![':', '-', '.', '_'];
 }
 
@@ -193,15 +192,21 @@ pub fn make_server_config(
 pub fn set_spiffe_separator(
     separator: &str
 ) -> Result<()>{
+    
     if separator.len() != 1 {
         return Err(anyhow!("invalid spiffe separator length: {}", separator.len()));
     }
 
-    if !VALID_SPIFFEID_SEPARATORS.contains(&separator.chars().next().unwrap()){
-        return Err(anyhow!("invalid spiffe separator char: {}", separator));
-    }
+    match &separator.chars().next() {
+        None => return Err(anyhow!("empty spiffe separator")),
+        Some(c) => {
+            if !VALID_SPIFFEID_SEPARATORS.contains(c){
+                return Err(anyhow!("invalid spiffe separator char: {}", separator));
+            }
+            SPIFFEID_SEPARATOR.store(*c as u8, Ordering::SeqCst);
 
-    let mut spiffeid_separator = SPIFFEID_SEPARATOR.write().unwrap();
-    *spiffeid_separator = separator.to_owned();
+        },
+      };
+
     Ok(())
 }
