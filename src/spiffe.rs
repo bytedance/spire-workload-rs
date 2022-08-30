@@ -1,9 +1,11 @@
+use super::SPIFFEID_SEPARATOR;
 use anyhow::{anyhow, Result};
 use serde::{
     de::{Unexpected, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
 };
 use std::collections::BTreeMap;
+use std::sync::atomic::Ordering;
 use std::fmt;
 use url::Url;
 use x509_parser::extensions::GeneralName;
@@ -132,12 +134,13 @@ impl SpiffeID {
             .path_segments()
             .map(|x| x.collect::<Vec<&str>>())
             .unwrap_or_default();
+        let separator = SPIFFEID_SEPARATOR.load(Ordering::SeqCst);
         let mut components: BTreeMap<String, String> = BTreeMap::new();
         for segment in segments {
             if segment.is_empty() {
                 continue;
             }
-            let split_index = segment.find(':');
+            let split_index = segment.find(separator as char);
             if split_index.is_none() {
                 return Err(anyhow!("malformed component in spiffe url: '{}'", segment));
             }
@@ -188,7 +191,7 @@ impl fmt::Display for SpiffeID {
             self.trust_domain,
             self.components
                 .iter()
-                .map(|(name, value)| format!("{}:{}", name, value))
+                .map(|(name, value)| format!("{}{}{}", name, SPIFFEID_SEPARATOR.load(Ordering::SeqCst) as char ,value))
                 .collect::<Vec<String>>()
                 .join("/")
         )
@@ -204,8 +207,9 @@ impl fmt::Display for SpiffeIDMatcher {
             self.components
                 .iter()
                 .map(|(name, value)| format!(
-                    "{}:{}",
+                    "{}{}{}",
                     name,
+                    SPIFFEID_SEPARATOR.load(Ordering::SeqCst) as char,
                     value.as_ref().map(|x| &**x).unwrap_or("*")
                 ))
                 .collect::<Vec<String>>()
@@ -276,6 +280,7 @@ impl SpiffeIDMatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::set_spiffe_separator;
 
     #[test]
     fn test_spiffe_matcher_basic() -> Result<()> {
@@ -423,6 +428,7 @@ mod tests {
 
     #[test]
     fn test_spiffe_matcher_matching_wildcard() -> Result<()> {
+        set_spiffe_separator(":").unwrap();
         let spiffe_matcher = SpiffeIDMatcher::new(Url::parse(
             "spiffe://spiffe-test/ns:*/r:us/vdc:d/id:security.platform.kms_client",
         )?)?;
@@ -573,6 +579,26 @@ mod tests {
     fn test_spiffe_component_reset() -> Result<()> {
         SpiffeID::new(Url::parse(
             "spiffe://spiffe-test/ns:tce/ns:tce/r:us/vdc:useast2a/id:security.platform.kms_client",
+        )?)
+        .unwrap_err();
+        Ok(())
+    }
+
+    #[test]
+    fn test_spiffe_component_reset_with_separator() -> Result<()> {
+        set_spiffe_separator("_").unwrap();
+        SpiffeID::new(Url::parse(
+            "spiffe://spiffe-test/ns_tce/ns_tce/r_cn/vdc_boe/id_security.platform.kms_client",
+        )?)
+        .unwrap_err();
+        set_spiffe_separator(":").unwrap();
+        Ok(())
+    }
+    #[test]
+    fn test_spiffe_component_reset_with_invalid_separator() -> Result<()> {
+        assert!(!set_spiffe_separator("!").is_ok());
+        SpiffeID::new(Url::parse(
+            "spiffe://spiffe-test/ns:tce/ns:tce/r:cn/vdc:boe/id:security.platform.kms_client",
         )?)
         .unwrap_err();
         Ok(())
